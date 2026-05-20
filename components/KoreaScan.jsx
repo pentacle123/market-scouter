@@ -375,6 +375,11 @@ export default function KoreaScan() {
                         label="전월 대비"
                         value={fmtPct(r.mom.deltaPct)}
                         color={deltaColor(r.mom.deltaPct, hasData)}
+                        sub={
+                          r.mom.periodLast && r.mom.periodPrev
+                            ? `${fmtPeriod(r.mom.periodPrev)} → ${fmtPeriod(r.mom.periodLast)}${r.mom.excludedPartial ? " · 부분월 제외" : ""}`
+                            : ""
+                        }
                         big
                       />
                       <Metric
@@ -429,6 +434,9 @@ export default function KoreaScan() {
             ※ 네이버 데이터랩의 ratio 는 요청 내 최대값을 100으로 환산한 상대값입니다.
             카테고리 간 직접 비교보다는 각 카테고리의 시간 추이와 전월 대비 증감률에
             의미를 두세요.
+            <br />
+            ※ 전월 대비 계산은 진행중인 부분 월을 제외하고 직전 완료월 기준으로 비교합니다
+            (19일치 vs 30일치 같은 측정 편향 방지).
           </p>
         </>
       )}
