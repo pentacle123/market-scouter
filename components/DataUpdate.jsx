@@ -51,10 +51,11 @@ export default function DataUpdate({ onComplete }) {
   const analyzedCount = Object.keys(caches.ai || {}).length;
   const missingCount = D.length - analyzedCount;
 
-  // Claude 비용 추정 (선택된 scope 기준)
+  // Claude 비용 추정 (선택된 scope 기준).
+  // 8축 스키마 + max_tokens 2000 → 카테고리당 input ~1,800, output ~1,400 가정
   const claudeTargets =
     opts.claude === "all" ? D.length : opts.claude === "missing" ? missingCount : 0;
-  const estCostUSD = (claudeTargets * 1500 * 3 + claudeTargets * 800 * 15) / 1_000_000;
+  const estCostUSD = (claudeTargets * 1800 * 3 + claudeTargets * 1400 * 15) / 1_000_000;
 
   async function run() {
     setRunning(true);

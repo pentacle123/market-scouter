@@ -302,6 +302,28 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
         })}
       </div>
 
+      {/* AI 4축 분석 (v2 Phase 2) */}
+      {ai && (
+        <>
+          <h3 style={{ fontSize: 13, fontWeight: 700, color: "#222", margin: "16px 0 6px" }}>
+            🤖 AI 4축 분석 (Phase 2)
+          </h3>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 6,
+              marginBottom: 14,
+            }}
+          >
+            <TrendDurationCard data={ai.trendDuration} />
+            <KoreaCulturalFitCard data={ai.koreaCulturalFit} />
+            <MegatrendTailwindCard data={ai.megatrendTailwind} />
+            <AdoptionSpeedCard data={ai.adoptionSpeed} />
+          </div>
+        </>
+      )}
+
       {/* 검증 결론 + 다음 화면 */}
       <div
         style={{
@@ -356,9 +378,265 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
       </div>
 
       <p style={{ fontSize: 10, color: "#AAA", marginTop: 10, lineHeight: 1.6 }}>
-        Phase 2 예정: 트렌드 지속성 분석, 한국 문화 적합성, 구조적 순풍 분석, 채택 속도 예측이 이
-        화면에 추가됩니다.
+        ※ AI 4축 분석은 매트릭스 뷰의 "데이터 업데이트"에서 Claude 분석을 실행하면 채워집니다.
       </p>
+    </div>
+  );
+}
+
+// ─── AI 4축 카드 ──────────────────────────────────────────────────────────────
+
+function durationColor(verdict) {
+  if (verdict === "장기") return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
+  if (verdict === "중기") return { bg: "#FFFBEB", border: "#FDE68A", text: "#D97706" };
+  if (verdict === "반짝") return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
+  return { bg: "#F9FAFB", border: "#E5E7EB", text: "#6B7280" };
+}
+
+function fitColor(verdict) {
+  if (verdict === "유리") return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
+  if (verdict === "불리") return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
+  return { bg: "#F9FAFB", border: "#E5E7EB", text: "#6B7280" };
+}
+
+function tailwindColor(judgement) {
+  if (judgement === "순풍") return { bg: "#ECFDF5", text: "#059669" };
+  if (judgement === "역풍") return { bg: "#FEF2F2", text: "#DC2626" };
+  return { bg: "#F9FAFB", text: "#6B7280" };
+}
+
+function speedColor(verdict) {
+  if (verdict === "빠름") return { bg: "#ECFDF5", border: "#A7F3D0", text: "#059669" };
+  if (verdict === "느림") return { bg: "#FEF2F2", border: "#FECACA", text: "#DC2626" };
+  return { bg: "#FFFBEB", border: "#FDE68A", text: "#D97706" };
+}
+
+function TrendDurationCard({ data }) {
+  if (!data) return <EmptyAxisCard title="⏳ 트렌드 지속성" />;
+  const c = durationColor(data.verdict);
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#222" }}>⏳ 트렌드 지속성</span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: "#fff",
+            background: c.text,
+            borderRadius: 99,
+            padding: "1px 7px",
+          }}
+        >
+          {data.verdict || "—"}
+        </span>
+        {data.score != null && (
+          <span style={{ fontSize: 11, fontWeight: 800, color: c.text, marginLeft: "auto" }}>
+            {data.score}
+          </span>
+        )}
+      </div>
+      {data.globalEmerged && (
+        <FieldLine label="글로벌 등장" value={data.globalEmerged} />
+      )}
+      {data.growthShape && <FieldLine label="성장 곡선" value={data.growthShape} />}
+      {data.institutionalization && (
+        <FieldLine label="제도화" value={data.institutionalization} />
+      )}
+    </div>
+  );
+}
+
+function KoreaCulturalFitCard({ data }) {
+  if (!data) return <EmptyAxisCard title="🇰🇷 한국 문화 적합성" />;
+  const c = fitColor(data.verdict);
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#222" }}>🇰🇷 문화 적합성</span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: "#fff",
+            background: c.text,
+            borderRadius: 99,
+            padding: "1px 7px",
+          }}
+        >
+          {data.verdict || "—"}
+        </span>
+        {data.score != null && (
+          <span style={{ fontSize: 11, fontWeight: 800, color: c.text, marginLeft: "auto" }}>
+            {data.score}
+          </span>
+        )}
+      </div>
+      {data.favorable && <FieldLine label="👍 유리" value={data.favorable} />}
+      {data.unfavorable && <FieldLine label="👎 불리" value={data.unfavorable} />}
+      {data.reasoning && (
+        <div style={{ fontSize: 10, color: "#555", marginTop: 3, lineHeight: 1.5 }}>
+          {data.reasoning}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MegatrendTailwindCard({ data }) {
+  if (!data) return <EmptyAxisCard title="🌬️ 구조적 순풍" />;
+  const axes = [
+    { id: "demographic", l: "인구", v: data.demographic },
+    { id: "climate", l: "기후", v: data.climate },
+    { id: "technology", l: "기술", v: data.technology },
+    { id: "consumerBehavior", l: "소비", v: data.consumerBehavior },
+  ];
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: "#fff",
+        border: "1px solid #E5E7EB",
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#222" }}>🌬️ 구조적 순풍</span>
+        {data.score != null && (
+          <span style={{ fontSize: 11, fontWeight: 800, color: "#4338CA", marginLeft: "auto" }}>
+            {data.score}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 3, marginBottom: 4 }}>
+        {axes.map((a) => {
+          const col = tailwindColor(a.v);
+          return (
+            <div
+              key={a.id}
+              style={{
+                fontSize: 9.5,
+                padding: "3px 7px",
+                background: col.bg,
+                color: col.text,
+                borderRadius: 99,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 4,
+              }}
+            >
+              <span style={{ fontWeight: 600 }}>{a.l}</span>
+              <span style={{ fontWeight: 700 }}>{a.v || "—"}</span>
+            </div>
+          );
+        })}
+      </div>
+      {data.keyTailwind && <FieldLine label="핵심 순풍" value={data.keyTailwind} />}
+    </div>
+  );
+}
+
+function AdoptionSpeedCard({ data }) {
+  if (!data) return <EmptyAxisCard title="🚀 한국 채택 속도" />;
+  const c = speedColor(data.verdict);
+  const flags = [
+    { l: "모바일 구매", v: data.mobilePurchase },
+    { l: "가성비 비교", v: data.priceComparison },
+    { l: "SNS 인증", v: data.snsCompatible },
+  ];
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#222" }}>🚀 채택 속도</span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: "#fff",
+            background: c.text,
+            borderRadius: 99,
+            padding: "1px 7px",
+          }}
+        >
+          {data.verdict || "—"}
+        </span>
+        {data.score != null && (
+          <span style={{ fontSize: 11, fontWeight: 800, color: c.text, marginLeft: "auto" }}>
+            {data.score}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 4 }}>
+        {flags.map((f, i) => (
+          <span
+            key={i}
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              padding: "2px 7px",
+              borderRadius: 99,
+              background: f.v ? "#ECFDF5" : "#F9FAFB",
+              color: f.v ? "#059669" : "#9CA3AF",
+              border: f.v ? "1px solid #A7F3D0" : "1px solid #E5E7EB",
+            }}
+          >
+            {f.v ? "✓" : "·"} {f.l}
+          </span>
+        ))}
+      </div>
+      {data.convenienceLift && <FieldLine label="편의성" value={data.convenienceLift} />}
+      {data.habitChangeRequired && (
+        <FieldLine label="습관 변화" value={data.habitChangeRequired} />
+      )}
+    </div>
+  );
+}
+
+function EmptyAxisCard({ title }) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: "#F9FAFB",
+        border: "1px dashed #E5E7EB",
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#999", marginBottom: 2 }}>{title}</div>
+      <div style={{ fontSize: 9.5, color: "#AAA", lineHeight: 1.4 }}>
+        AI 분석 결과 없음
+      </div>
+    </div>
+  );
+}
+
+function FieldLine({ label, value }) {
+  if (!value) return null;
+  return (
+    <div style={{ fontSize: 10, color: "#444", lineHeight: 1.5, marginTop: 2 }}>
+      <span style={{ color: "#6B7280", fontWeight: 600 }}>{label} </span>
+      {value}
     </div>
   );
 }
