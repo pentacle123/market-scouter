@@ -49,18 +49,22 @@ app/
   globals.css
   api/
     youtube-scan/route.js           # YouTube 스캔 Route Handler (서버)
-    naver-trend/route.js            # 네이버 데이터랩 Route Handler (서버)
+    naver-trend/route.js            # 네이버 검색어 트렌드 Route Handler
+    naver-shopping/route.js         # 네이버 쇼핑 인사이트 Route Handler
 lib/
-  data.js                           # 카테고리 데이터 + 계산 유틸 (kw 포함)
+  data.js                           # 카테고리 데이터 + 계산 유틸 (kw, naverCid 포함)
   api/
     youtube.js                      # YouTube Data API v3 클라이언트
-    naver.js                        # 네이버 데이터랩 트렌드 클라이언트
+    naver.js                        # 네이버 검색어 트렌드 클라이언트
+    naver-shopping.js               # 네이버 쇼핑 인사이트 클라이언트
 components/
   Framework.jsx                     # 프레임워크 뷰
   Matrix.jsx                        # 매트릭스 뷰 (ScatterChart)
   Detail.jsx                        # 상세 분석 뷰 (RadarChart)
   GlobalScan.jsx                    # 글로벌 스캔 뷰 (US vs KR BarChart)
-  KoreaScan.jsx                     # 한국 수요 스캔 뷰 (12개월 LineChart + MoM)
+  KoreaScan.jsx                     # 한국 수요 탭 컨테이너
+  KoreaSearchTrend.jsx              # ↳ 검색 트렌드 패널 (12M LineChart + MoM)
+  KoreaShoppingInsight.jsx          # ↳ 쇼핑 인사이트 패널 (시계열 + 성별/연령/기기)
 ```
 
 ## 글로벌 스캔 (Phase 2)
@@ -74,11 +78,27 @@ components/
 
 ## 한국 수요 스캔 (Phase 2)
 
-`/api/naver-trend` 는 네이버 데이터랩 통합검색어 트렌드 API 로 각 카테고리 KR 키워드의 최근 12개월 검색량 추이를 가져옵니다.
+"한국 수요" 탭은 네이버 데이터랩의 두 가지 API를 탭으로 묶어 제공합니다. 두 API 모두 동일한 `NAVER_CLIENT_ID/SECRET` 자격증명을 사용합니다.
 
-- **호출 구조**: 데이터랩은 1요청당 keywordGroups 최대 5개 → 17 카테고리는 4배치(5+5+5+2)로 분할 호출.
-- **응답 ratio**: 요청 내 최대값을 100으로 환산한 **상대값** (배치 간 절대 비교 불가). 동일 카테고리 내 시계열 추이와 MoM 증감률만 의미 있음.
-- **자동 하이라이트**: 전월 대비 ±20% 이상이면 📈 급상승 / 📉 하락으로 표시.
-- **호출 시점 / 캐싱**: 글로벌 스캔과 동일 — 사용자가 "한국 수요" 탭에서 버튼 클릭 시에만, 결과는 `localStorage`.
+### 🔍 검색 트렌드 (`/api/naver-trend`)
+
+통합검색어 트렌드 API 로 각 카테고리 KR 키워드의 최근 12개월 검색량 추이.
+
+- **호출 구조**: 1요청당 keywordGroups 최대 5개 → 17 카테고리 = 4배치(5+5+5+2).
+- **응답 ratio**: 요청 내 최대값을 100으로 환산한 **상대값** (배치 간 절대 비교 불가). 동일 카테고리 내 시계열·MoM 만 의미 있음.
+- **MoM**: 진행중인 부분월은 제외하고 직전 완료월 기준으로 비교 (19일치 vs 30일치 같은 측정 편향 방지).
+- **자동 하이라이트**: 전월 대비 ±20% 이상이면 📈 급상승 / 📉 하락.
+
+### 🛒 쇼핑 인사이트 (`/api/naver-shopping`)
+
+쇼핑 인사이트 4종 API를 통합 호출 — 카테고리 클릭 추이, 성별·연령·기기 분포.
+
+- **카테고리 매핑**: `data.js` 의 `naverCid` 필드. 안정적인 최상위 10대 카테고리(`50000000`~`50000009`)만 사용. 매칭이 없는 카테고리는 `null` → UI에서 "네이버 쇼핑 카테고리 미형성 = 🌊 블루오션 추가 증거" 카드로 표시.
+- **호출 구조**:
+  - `/v1/datalab/shopping/categories` — 1요청당 카테고리 최대 3개 → 매핑된 11개 = 4배치.
+  - `/v1/datalab/shopping/category/{device,gender,age}` — 카테고리당 3 호출, 병렬.
+  - 1회 전체 스캔 ≈ 4 (시계열) + 11×3 (분포) = **37 호출**.
+- **분포 추출**: 부분월 제외, 가장 최근 완료월의 ratio 를 성별/연령/기기 바 차트로 시각화.
+- **세부 매핑 정제**: 현재는 광역 매핑이라 특정 제품 단위 시그널은 노이즈가 큼. `datalab.naver.com/shoppingInsight/` 에서 sub-cid 확인 후 `data.js`의 `naverCid` 정제 권장.
 
 자세한 설계/로드맵은 [GUIDE.md](./GUIDE.md) 참고.
