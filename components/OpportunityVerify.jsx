@@ -8,6 +8,12 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
 } from "recharts";
 import {
   LAYER_NAMES,
@@ -29,6 +35,9 @@ import {
   getYoutubeForId,
   getNaverTrendForId,
   getNaverShoppingForId,
+  loadGoogleTrendsMap,
+  getGoogleTrendsForId,
+  setGoogleTrendsForId,
 } from "@/lib/ai-cache";
 
 function aiScoreColor(score) {
@@ -51,6 +60,9 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
   const [yt, setYt] = useState(null);
   const [nv, setNv] = useState(null);
   const [ns, setNs] = useState(null);
+  const [gt, setGt] = useState(null);
+  const [gtLoading, setGtLoading] = useState(false);
+  const [gtError, setGtError] = useState(null);
 
   useEffect(() => {
     if (!cat) return;
@@ -58,7 +70,27 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
     setYt(getYoutubeForId(loadJson(CACHE_KEYS.youtube), cat.id));
     setNv(getNaverTrendForId(loadJson(CACHE_KEYS.naverTrend), cat.id));
     setNs(getNaverShoppingForId(loadJson(CACHE_KEYS.naverShopping), cat.id));
+    setGt(getGoogleTrendsForId(loadGoogleTrendsMap(), cat.id));
+    setGtError(null);
   }, [cat?.id]);
+
+  async function fetchGoogleTrends() {
+    if (!cat) return;
+    setGtLoading(true);
+    setGtError(null);
+    try {
+      const res = await fetch(`/api/google-trends?categoryId=${cat.id}&geo=US&timeframe=today%205-y`, { cache: "no-store" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      const entry = { points: json.points, shape: json.shape, keyword: json.keyword, geo: json.geo, timeframe: json.timeframe };
+      setGoogleTrendsForId(cat.id, entry);
+      setGt({ ...entry, scannedAt: new Date().toISOString() });
+    } catch (e) {
+      setGtError(e.message || String(e));
+    } finally {
+      setGtLoading(false);
+    }
+  }
 
   if (!cat) {
     return (
@@ -253,6 +285,21 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
                 </span>
               </div>
               <div style={{ fontSize: 10.5, color: "#888", lineHeight: 1.6 }}>{c.layers[k]}</div>
+              {ai?.layerDetails?.[k] && (
+                <div
+                  style={{
+                    marginTop: 5,
+                    paddingTop: 5,
+                    borderTop: "1px dashed #F3F4F6",
+                    fontSize: 10.5,
+                    color: "#374151",
+                    lineHeight: 1.65,
+                  }}
+                >
+                  <span style={{ color: "#7C3AED", fontWeight: 700, marginRight: 4 }}>🤖</span>
+                  {ai.layerDetails[k]}
+                </div>
+              )}
               {/* 실시간 데이터 보강 */}
               {i === 0 && yt && (
                 <LayerLiveData
@@ -313,18 +360,34 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
               display: "grid",
               gridTemplateColumns: "1fr 1fr",
               gap: 6,
-              marginBottom: 14,
+              marginBottom: 10,
             }}
           >
-            <TrendDurationCard data={ai.trendDuration} />
+            <TrendDurationCard
+              data={ai.trendDuration}
+              gt={gt}
+              gtLoading={gtLoading}
+              gtError={gtError}
+              onFetch={fetchGoogleTrends}
+            />
             <KoreaCulturalFitCard data={ai.koreaCulturalFit} />
             <MegatrendTailwindCard data={ai.megatrendTailwind} />
             <AdoptionSpeedCard data={ai.adoptionSpeed} />
           </div>
+
+          {/* Google Trends 5년 차트 — 트렌드 지속성 카드 아래로 풀폭 */}
+          {(gt || gtLoading || gtError) && (
+            <GoogleTrendsPanel
+              gt={gt}
+              gtLoading={gtLoading}
+              gtError={gtError}
+              onRefetch={fetchGoogleTrends}
+            />
+          )}
         </>
       )}
 
-      {/* 검증 결론 + 다음 화면 */}
+      {/* 검증 결론 상세 */}
       <div
         style={{
           padding: "14px 16px",
@@ -332,26 +395,49 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
           border: "1px solid #A7F3D0",
           borderRadius: 10,
           marginBottom: 12,
+          marginTop: 14,
         }}
       >
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#059669", marginBottom: 6 }}>
-          ✅ 검증 결론
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#059669" }}>✅ 검증 결론</span>
+          {ai?.verdict?.score != null && (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: "#fff",
+                background: aiScoreColor(ai.verdict.score),
+                borderRadius: 99,
+                padding: "2px 9px",
+              }}
+            >
+              종합 {ai.verdict.score}
+            </span>
+          )}
         </div>
-        <div style={{ fontSize: 11.5, color: "#374151", lineHeight: 1.7 }}>
-          {ai?.verdict
-            ? ai.verdict.reasoning
-            : "AI 분석을 먼저 실행하면 이 자리에 검증 결론이 자동 생성됩니다."}
+        {ai?.verdict?.oneLine && (
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#065F46", marginBottom: 8, lineHeight: 1.5 }}>
+            "{ai.verdict.oneLine}"
+          </div>
+        )}
+        <div style={{ fontSize: 11.5, color: "#374151", lineHeight: 1.8 }}>
+          {ai?.verdict?.reasoning ? (
+            <p style={{ margin: 0 }}>{ai.verdict.reasoning}</p>
+          ) : (
+            "AI 분석을 먼저 실행하면 이 자리에 검증 결론이 자동 생성됩니다."
+          )}
         </div>
         {ai?.verdict?.nextAction && (
           <div
             style={{
-              marginTop: 8,
-              padding: "6px 10px",
+              marginTop: 10,
+              padding: "8px 12px",
               background: "#fff",
               border: "1px solid #A7F3D0",
               borderRadius: 6,
               fontSize: 11,
               color: "#065F46",
+              lineHeight: 1.6,
             }}
           >
             <b>다음 액션 ▸</b> {ai.verdict.nextAction}
@@ -411,9 +497,10 @@ function speedColor(verdict) {
   return { bg: "#FFFBEB", border: "#FDE68A", text: "#D97706" };
 }
 
-function TrendDurationCard({ data }) {
+function TrendDurationCard({ data, gt, gtLoading, gtError, onFetch }) {
   if (!data) return <EmptyAxisCard title="⏳ 트렌드 지속성" />;
   const c = durationColor(data.verdict);
+  const hasGt = Boolean(gt?.points?.length);
   return (
     <div
       style={{
@@ -443,13 +530,155 @@ function TrendDurationCard({ data }) {
           </span>
         )}
       </div>
-      {data.globalEmerged && (
-        <FieldLine label="글로벌 등장" value={data.globalEmerged} />
-      )}
+      {data.globalEmerged && <FieldLine label="글로벌 등장" value={data.globalEmerged} />}
       {data.growthShape && <FieldLine label="성장 곡선" value={data.growthShape} />}
-      {data.institutionalization && (
-        <FieldLine label="제도화" value={data.institutionalization} />
+      {data.institutionalization && <FieldLine label="제도화" value={data.institutionalization} />}
+
+      {/* Google Trends 데이터 트리거 */}
+      <button
+        onClick={onFetch}
+        disabled={gtLoading}
+        style={{
+          marginTop: 6,
+          width: "100%",
+          padding: "5px 8px",
+          fontSize: 10,
+          fontWeight: 700,
+          border: `1px solid ${c.border}`,
+          background: hasGt ? "#fff" : c.text,
+          color: hasGt ? c.text : "#fff",
+          borderRadius: 6,
+          cursor: gtLoading ? "wait" : "pointer",
+        }}
+      >
+        {gtLoading
+          ? "Google Trends 5년 데이터 가져오는 중…"
+          : hasGt
+            ? "🔄 Google Trends 다시 가져오기"
+            : "📈 Google Trends 5년 곡선 검증"}
+      </button>
+      {gtError && (
+        <div style={{ marginTop: 4, fontSize: 9.5, color: "#DC2626", lineHeight: 1.4 }}>
+          {gtError.slice(0, 140)}
+        </div>
       )}
+    </div>
+  );
+}
+
+// ─── Google Trends 패널 (5년 라인차트) ──────────────────────────────────────
+function GoogleTrendsPanel({ gt, gtLoading, gtError, onRefetch }) {
+  if (gtLoading && !gt) {
+    return (
+      <div
+        style={{
+          padding: "10px 12px",
+          background: "#F9FAFB",
+          border: "1px dashed #E5E7EB",
+          borderRadius: 8,
+          fontSize: 11,
+          color: "#666",
+          textAlign: "center",
+        }}
+      >
+        Google Trends 5년 데이터 가져오는 중…
+      </div>
+    );
+  }
+  if (!gt && gtError) {
+    return (
+      <div
+        style={{
+          padding: "10px 12px",
+          background: "#FEF2F2",
+          border: "1px solid #FECACA",
+          borderRadius: 8,
+        }}
+      >
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#B91C1C", marginBottom: 3 }}>
+          Google Trends 호출 실패
+        </div>
+        <div style={{ fontSize: 10.5, color: "#7F1D1D", lineHeight: 1.5 }}>{gtError}</div>
+      </div>
+    );
+  }
+  if (!gt) return null;
+
+  const chartData = gt.points.map((p) => ({ period: p.period, ratio: p.ratio }));
+  const shape = gt.shape || {};
+  const verdictColor =
+    shape.durationVerdict === "장기" ? "#059669" : shape.durationVerdict === "반짝" ? "#DC2626" : "#D97706";
+
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        background: "#fff",
+        border: "1px solid #E5E7EB",
+        borderRadius: 8,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: "#222" }}>
+          📈 Google Trends 5년 곡선 ({gt.geo} · "{gt.keyword}")
+        </span>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: "#fff",
+            background: verdictColor,
+            borderRadius: 99,
+            padding: "1px 7px",
+          }}
+        >
+          {shape.durationVerdict || shape.verdict}
+        </span>
+        <span style={{ fontSize: 10, color: "#666" }}>
+          평균 {shape.avg} · 피크 {shape.peak} · 최근 6M{" "}
+          <b style={{ color: shape.recentSlope >= 0 ? "#059669" : "#DC2626" }}>
+            {shape.recentSlope >= 0 ? "+" : ""}
+            {shape.recentSlope}%
+          </b>
+        </span>
+        <button
+          onClick={onRefetch}
+          disabled={gtLoading}
+          style={{
+            marginLeft: "auto",
+            padding: "2px 8px",
+            fontSize: 9.5,
+            border: "1px solid #E5E7EB",
+            background: "#fff",
+            borderRadius: 4,
+            cursor: "pointer",
+            color: "#666",
+          }}
+        >
+          {gtLoading ? "…" : "🔄"}
+        </button>
+      </div>
+      <ResponsiveContainer width="100%" height={160}>
+        <LineChart data={chartData} margin={{ top: 4, right: 12, bottom: 20, left: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+          <XAxis
+            dataKey="period"
+            tick={{ fill: "#999", fontSize: 9 }}
+            interval={Math.max(1, Math.floor(chartData.length / 6))}
+            tickFormatter={(p) => (typeof p === "string" ? p.slice(0, 7) : p)}
+          />
+          <YAxis tick={{ fill: "#AAA", fontSize: 9 }} domain={[0, 100]} />
+          <Tooltip
+            contentStyle={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 6, fontSize: 11 }}
+            formatter={(v) => [v + " (상대값)", "검색 관심도"]}
+          />
+          <Line type="monotone" dataKey="ratio" stroke={verdictColor} strokeWidth={1.6} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+      <div style={{ fontSize: 9.5, color: "#AAA", marginTop: 4, lineHeight: 1.5 }}>
+        ※ Google Trends 의 ratio 는 5년 구간 내 최대값을 100으로 정규화한 상대값입니다. Claude
+        분석의 "장기/중기/반짝" 판정과 비교해 보세요.
+      </div>
     </div>
   );
 }

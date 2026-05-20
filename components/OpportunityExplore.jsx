@@ -228,11 +228,147 @@ export default function OpportunityExplore({ onPick }) {
         </ResponsiveContainer>
       </div>
 
-      {/* 분류별 카테고리 리스트 */}
-      <GroupList items={items} onPick={onPick} type="blue" />
-      <GroupList items={items} onPick={onPick} type="gap" />
-      <GroupList items={items} onPick={onPick} type="cond" />
-      <GroupList items={items} onPick={onPick} type="no" />
+      {/* 분류별 카테고리 리스트 — 데스크톱 4컬럼 / 태블릿 2컬럼 / 모바일 1컬럼 */}
+      <FourColumnGroups items={items} onPick={onPick} />
+    </div>
+  );
+}
+
+function FourColumnGroups({ items, onPick }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        gap: 8,
+        alignItems: "start",
+      }}
+    >
+      {["blue", "gap", "cond", "no"].map((type) => (
+        <GroupColumn key={type} items={items} onPick={onPick} type={type} />
+      ))}
+    </div>
+  );
+}
+
+function GroupColumn({ items, onPick, type }) {
+  const list = items.filter((c) => c.type === type);
+  return (
+    <div
+      style={{
+        background: "#fff",
+        border: "1px solid " + TBR[type],
+        borderRadius: 10,
+        padding: "8px 8px 10px",
+      }}
+    >
+      {/* 컬럼 헤더 */}
+      <div
+        style={{
+          padding: "6px 8px 8px",
+          marginBottom: 6,
+          borderBottom: "1px solid " + TBR[type],
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+        }}
+      >
+        <span style={{ fontSize: 12, fontWeight: 800, color: TC[type], flex: 1, lineHeight: 1.2 }}>
+          {TL[type]}
+        </span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            color: "#fff",
+            background: TC[type],
+            borderRadius: 99,
+            padding: "1px 8px",
+            minWidth: 22,
+            textAlign: "center",
+          }}
+        >
+          {list.length}
+        </span>
+      </div>
+      {list.length === 0 ? (
+        <div style={{ fontSize: 10.5, color: "#AAA", padding: "6px 4px" }}>—</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {list.map((c) => (
+            <CompactCategoryCard key={c.id} c={c} onPick={onPick} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompactCategoryCard({ c, onPick }) {
+  const sigs = LAYER_KEYS.map((k) => sig(c[k]));
+  return (
+    <div
+      onClick={() => onPick(c)}
+      style={{
+        padding: "6px 8px",
+        background: TB[c.type],
+        border: "1px solid " + TBR[c.type],
+        borderRadius: 6,
+        cursor: "pointer",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+        <span style={{ fontWeight: 900, color: TC[c.type], fontSize: 11, minWidth: 18 }}>
+          {c.total}
+        </span>
+        <span style={{ fontSize: 13 }}>{c.e}</span>
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            color: "#222",
+            lineHeight: 1.25,
+            flex: 1,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={c.n}
+        >
+          {c.n}
+        </span>
+        {c.aiVerdict != null && (
+          <span
+            title={c.aiOneLine || ""}
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              color: "#fff",
+              background: aiScoreColor(c.aiVerdict),
+              borderRadius: 99,
+              padding: "1px 5px",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🤖{c.aiVerdict}
+          </span>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span
+          style={{
+            fontSize: 8.5,
+            color: "#999",
+            flex: 1,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {c.mk}
+        </span>
+        <span style={{ fontSize: 8, letterSpacing: 0.5 }}>{sigs.map((s) => s.l).join("")}</span>
+      </div>
     </div>
   );
 }
@@ -256,78 +392,4 @@ function SummaryCard({ label, value, color, bg, border }) {
   );
 }
 
-function GroupList({ items, onPick, type }) {
-  const list = items.filter((c) => c.type === type);
-  if (!list.length) return null;
-  return (
-    <div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: TC[type], margin: "14px 0 6px" }}>
-        {TL[type]} ({list.length})
-      </div>
-      {list.map((c) => (
-        <CategoryCard key={c.id} c={c} onPick={onPick} />
-      ))}
-    </div>
-  );
-}
-
-function CategoryCard({ c, onPick }) {
-  const sigs = LAYER_KEYS.map((k) => sig(c[k]));
-  return (
-    <div
-      onClick={() => onPick(c)}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 7,
-        padding: "9px 12px",
-        marginBottom: 4,
-        background: TB[c.type],
-        border: "1px solid " + TBR[c.type],
-        borderRadius: 8,
-        cursor: "pointer",
-      }}
-    >
-      <span style={{ fontWeight: 900, color: TC[c.type], width: 26, fontSize: 13 }}>{c.total}</span>
-      <span style={{ fontSize: 16 }}>{c.e}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#222" }}>{c.n}</div>
-        <div style={{ fontSize: 10, color: "#999", marginTop: 1 }}>{c.mk}</div>
-      </div>
-      {c.aiVerdict != null && (
-        <span
-          title={c.aiOneLine || ""}
-          style={{
-            fontSize: 10,
-            fontWeight: 800,
-            color: "#fff",
-            background: aiScoreColor(c.aiVerdict),
-            borderRadius: 99,
-            padding: "2px 7px",
-            whiteSpace: "nowrap",
-          }}
-        >
-          🤖 {c.aiVerdict}
-        </span>
-      )}
-      <span style={{ fontSize: 9.5, letterSpacing: 1 }}>
-        {sigs.map((s) => s.l).join("")}
-      </span>
-      <span
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: "#4338CA",
-          background: "#fff",
-          border: "1px solid #C7D2FE",
-          borderRadius: 99,
-          padding: "2px 9px",
-          marginLeft: 2,
-          whiteSpace: "nowrap",
-        }}
-      >
-        검증 →
-      </span>
-    </div>
-  );
-}
+// (GroupList / CategoryCard 는 가로 4컬럼으로 대체되어 제거됨)

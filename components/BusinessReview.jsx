@@ -27,6 +27,8 @@ import {
   formatKRW,
   formatKRWFull,
   recommendEntryMode,
+  explainConfidence,
+  classifyRisks,
 } from "@/lib/business";
 
 function aiScoreColor(score) {
@@ -87,6 +89,8 @@ export default function BusinessReview({ cat, onNext, onBack }) {
     () => (cat ? computeChecklist(cat, ai, economics, cashflow) : null),
     [cat, ai, economics, cashflow]
   );
+  const confidenceExplain = useMemo(() => explainConfidence(checklist), [checklist]);
+  const riskClassification = useMemo(() => classifyRisks(cat), [cat]);
   const entry = useMemo(() => recommendEntryMode(ai, economics), [ai, economics]);
 
   if (!cat) {
@@ -193,6 +197,42 @@ export default function BusinessReview({ cat, onNext, onBack }) {
               </div>
             </div>
           </div>
+          {/* 확신도 계산 근거 */}
+          {confidenceExplain?.topDeductions?.length > 0 && (
+            <div
+              style={{
+                marginBottom: 8,
+                padding: "8px 10px",
+                background: "#FAFAFA",
+                border: "1px solid #E5E7EB",
+                borderRadius: 6,
+                fontSize: 10.5,
+                color: "#555",
+                lineHeight: 1.6,
+              }}
+            >
+              <span style={{ color: "#6B7280", fontWeight: 700 }}>주요 감점</span> ▸{" "}
+              {confidenceExplain.topDeductions.map((d, i) => (
+                <span key={i} style={{ marginRight: 6 }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "1px 7px",
+                      borderRadius: 99,
+                      background: d.icon === "❌" ? "#FEF2F2" : "#FFFBEB",
+                      color: d.icon === "❌" ? "#B91C1C" : "#92400E",
+                      border: d.icon === "❌" ? "1px solid #FECACA" : "1px solid #FDE68A",
+                      fontWeight: 700,
+                      marginRight: 3,
+                    }}
+                  >
+                    {d.icon} {d.label}
+                  </span>
+                  {d.note && <span style={{ color: "#888", fontSize: 10 }}>{d.note.slice(0, 60)}</span>}
+                </span>
+              ))}
+            </div>
+          )}
           {ai?.verdict?.nextAction && (
             <div
               style={{
@@ -287,9 +327,52 @@ export default function BusinessReview({ cat, onNext, onBack }) {
         </Section>
       )}
 
-      {/* Exit 기준 + 최대 손실 + 킬 리스크 */}
-      <Section title="⚠️ Exit 기준 + 최대 손실 + 리스크">
-        <ExitRiskForm cat={cat} value={exit} onChange={setExit} />
+      {/* 최대 리스크 / 킬 리스크 하이라이트 */}
+      {riskClassification?.topRisk && (
+        <Section title="⚠️ 리스크 우선순위">
+          <TopRiskCard topRisk={riskClassification.topRisk} />
+          {/* 나머지 리스크 */}
+          {(riskClassification.killRisks.length + riskClassification.normalRisks.length) > 1 && (
+            <div style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 10, color: "#6B7280", fontWeight: 700, marginBottom: 4 }}>
+                기타 리스크
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {[...riskClassification.killRisks.slice(1), ...riskClassification.normalRisks]
+                  .filter((r) => {
+                    const text = typeof r === "string" ? r : r.text;
+                    return text !== riskClassification.topRisk.text;
+                  })
+                  .map((r, i) => {
+                    const isKill = typeof r === "object";
+                    const text = isKill ? r.text : r;
+                    return (
+                      <span
+                        key={i}
+                        style={{
+                          padding: "3px 9px",
+                          borderRadius: 6,
+                          fontSize: 11,
+                          background: isKill ? "#FEF2F2" : "#F9FAFB",
+                          color: isKill ? "#B91C1C" : "#444",
+                          border: isKill ? "1px solid #FECACA" : "1px solid #E5E7EB",
+                          fontWeight: isKill ? 700 : 400,
+                        }}
+                      >
+                        {isKill ? "☠️ " : "· "}
+                        {text}
+                      </span>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* Exit 기준 + 최대 손실 */}
+      <Section title="🚪 Exit 기준 + 최대 손실">
+        <ExitRiskForm cat={cat} value={exit} onChange={setExit} hideRisks />
       </Section>
 
       {/* 제품 인텔리전스 / 파트너 / 마케팅 — Phase 1 BusinessReview 의 핵심부만 압축 보존 */}
@@ -348,25 +431,9 @@ export default function BusinessReview({ cat, onNext, onBack }) {
         </Section>
       )}
 
-      {(cat.partners || []).length > 0 && (
-        <Section title="🤝 파트너 후보">
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {cat.partners.map((p, i) => (
-              <span
-                key={i}
-                style={{
-                  padding: "4px 10px",
-                  borderRadius: 6,
-                  fontSize: 11,
-                  background: "#EEF2FF",
-                  color: "#4338CA",
-                  border: "1px solid #C7D2FE",
-                }}
-              >
-                {p}
-              </span>
-            ))}
-          </div>
+      {((cat.partners || []).length > 0 || ai?.partnerStrategy) && (
+        <Section title="🤝 파트너 & 협업 전략">
+          <PartnerSection partners={cat.partners} strategy={ai?.partnerStrategy} />
         </Section>
       )}
 
@@ -655,7 +722,7 @@ function CashflowPanel({ cashflow }) {
 
 // ─── Exit 기준 + 킬 리스크 폼 ────────────────────────────────────────────────
 
-function ExitRiskForm({ cat, value, onChange }) {
+function ExitRiskForm({ cat, value, onChange, hideRisks }) {
   const set = (key) => (v) => onChange({ ...value, [key]: v });
   return (
     <div>
@@ -685,7 +752,7 @@ function ExitRiskForm({ cat, value, onChange }) {
         누적 손실이 <b>{formatKRW(value.maxLoss)}</b>를 초과하면 사업 중단.
       </div>
 
-      {(cat.risks || []).length > 0 && (
+      {!hideRisks && (cat.risks || []).length > 0 && (
         <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 10, color: "#6B7280", fontWeight: 700, marginBottom: 4 }}>
             GUIDE 식별 리스크
@@ -713,6 +780,192 @@ function ExitRiskForm({ cat, value, onChange }) {
               );
             })}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 파트너 & 협업 전략 섹션 ──────────────────────────────────────────────────
+function PartnerSection({ partners = [], strategy }) {
+  // 파트너 이름을 단순 휴리스틱으로 유형 분류
+  const classify = (name) => {
+    if (/OEM|ODM|제조|공장/.test(name)) return { type: "제조", color: "#F59E0B", icon: "🏭" };
+    if (/유튜버|크리에이터|인플루언서|틱톡/.test(name)) return { type: "크리에이터", color: "#EC4899", icon: "🎬" };
+    if (/플랫폼|쿠팡|올리브영|와디즈|MD/.test(name)) return { type: "유통", color: "#3B82F6", icon: "🛒" };
+    if (/앱|외주|IoT|기술|개발/.test(name)) return { type: "기술", color: "#10B981", icon: "💻" };
+    if (/투자|VC|스타트업|메이커/.test(name)) return { type: "투자", color: "#7C3AED", icon: "💼" };
+    return { type: "기타", color: "#6B7280", icon: "🤝" };
+  };
+
+  const grouped = {};
+  partners.forEach((p) => {
+    const c = classify(p);
+    if (!grouped[c.type]) grouped[c.type] = { ...c, items: [] };
+    grouped[c.type].items.push(p);
+  });
+
+  return (
+    <div>
+      {/* Claude 추천 협업 모델 */}
+      {strategy && (
+        <div
+          style={{
+            padding: "10px 12px",
+            background: "linear-gradient(135deg,#FAF5FF,#EEF2FF)",
+            border: "1px solid #C7D2FE",
+            borderRadius: 8,
+            marginBottom: 8,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#4338CA" }}>🤖 Claude 추천 협업 모델</span>
+            {strategy.recommendedModel && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: "#fff",
+                  background: "#4338CA",
+                  borderRadius: 99,
+                  padding: "2px 10px",
+                }}
+              >
+                {strategy.recommendedModel}
+              </span>
+            )}
+          </div>
+          {strategy.reasoning && (
+            <div style={{ fontSize: 11, color: "#374151", lineHeight: 1.6, marginBottom: 6 }}>
+              {strategy.reasoning}
+            </div>
+          )}
+          {(strategy.firstTestPartner || strategy.scalePartner) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+              {strategy.firstTestPartner && (
+                <div
+                  style={{
+                    padding: "7px 10px",
+                    background: "#fff",
+                    border: "1px solid #C7D2FE",
+                    borderRadius: 6,
+                  }}
+                >
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#4338CA", marginBottom: 2 }}>
+                    1단계 · 첫 테스트
+                  </div>
+                  <div style={{ fontSize: 11, color: "#222", lineHeight: 1.5 }}>
+                    {strategy.firstTestPartner}
+                  </div>
+                </div>
+              )}
+              {strategy.scalePartner && (
+                <div
+                  style={{
+                    padding: "7px 10px",
+                    background: "#fff",
+                    border: "1px solid #C7D2FE",
+                    borderRadius: 6,
+                  }}
+                >
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#4338CA", marginBottom: 2 }}>
+                    2단계 · 양산 전환
+                  </div>
+                  <div style={{ fontSize: 11, color: "#222", lineHeight: 1.5 }}>
+                    {strategy.scalePartner}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 파트너 후보 유형별 분류 */}
+      {partners.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {Object.values(grouped).map((g) => (
+            <div
+              key={g.type}
+              style={{
+                padding: "7px 10px",
+                background: "#fff",
+                border: "1px solid #E5E7EB",
+                borderRadius: 6,
+                borderLeft: `3px solid ${g.color}`,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                <span style={{ fontSize: 13 }}>{g.icon}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: g.color }}>{g.type}</span>
+                <span style={{ fontSize: 9.5, color: "#999" }}>{g.items.length}건</span>
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                {g.items.map((p, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      fontSize: 10.5,
+                      background: g.color + "1A",
+                      color: g.color,
+                      border: "1px solid " + g.color + "55",
+                    }}
+                  >
+                    {p}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ fontSize: 9.5, color: "#AAA", marginTop: 6, lineHeight: 1.5 }}>
+        ※ 현재 파트너 목록은 GUIDE 하드코딩 데이터. 향후 KIPRIS/1688/와디즈 API 연동으로 확장 예정.
+      </div>
+    </div>
+  );
+}
+
+// ─── 최대 리스크 카드 ─────────────────────────────────────────────────────────
+function TopRiskCard({ topRisk }) {
+  const isKill = topRisk.isKill;
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        background: isKill ? "#FEE2E2" : "#FEF2F2",
+        border: isKill ? "2px solid #DC2626" : "1px solid #FECACA",
+        borderRadius: 10,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: isKill ? "#7F1D1D" : "#B91C1C" }}>
+          {isKill ? "☠️ 킬 리스크" : "⚠️ 최대 리스크"}
+        </span>
+        {isKill && topRisk.matchedKeyword && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#fff",
+              background: "#DC2626",
+              borderRadius: 99,
+              padding: "1px 8px",
+            }}
+          >
+            {topRisk.matchedKeyword}
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#7F1D1D", lineHeight: 1.5 }}>
+        {topRisk.text}
+      </div>
+      {isKill && (
+        <div style={{ fontSize: 10.5, color: "#991B1B", marginTop: 4, lineHeight: 1.5 }}>
+          사업 자체를 죽일 수 있는 리스크입니다. 진입 전 반드시 사전 확인이 필요합니다.
         </div>
       )}
     </div>
