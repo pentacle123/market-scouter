@@ -42,35 +42,49 @@ npm run build
 npm run start
 ```
 
+## 화면 구조 (v2 — 의사결정 퍼널)
+
+```
+화면 1 기회 탐색 → 화면 2 기회 검증 → 화면 3 사업 심사 → 화면 4 실행 계획
+30 카테고리        5~7 후보            2~3 심사 대상       1 최종 선정
+```
+
+- **화면 1 (탐색)**: 핵심 요약(블루오션/틈새/조건부/비추천) + Claude TOP3 + 데이터 업데이트 패널 + 매트릭스 ScatterChart + 카테고리 랭킹.
+- **화면 2 (검증)**: 카테고리 헤더 + Claude 검증 결론 + 6-Layer 레이더 + 실시간 데이터(YouTube/네이버) 보강.
+- **화면 3 (심사)**: GO/CONDITIONAL-GO/NO-GO 결정 카드 + 체크리스트(Phase 3 에서 12체크 풀버전) + 제품 인텔리전스 + 파트너 + 마케팅 전략 + 경쟁 구조 + 수익성/리스크.
+- **화면 4 (실행)**: 다음 첫 액션 + 진입 단계 로드맵(Pentacle 4단계) + 인접 확장 비전.
+
+자세한 마이그레이션 계획은 [MIGRATION-v2.md](./MIGRATION-v2.md) 참고.
+
 ## 프로젝트 구조
 
 ```
 app/
   layout.jsx                       # 메타데이터, HTML 셸, 폰트
-  page.jsx                          # 메인 셸 + 뷰 라우팅
+  page.jsx                          # v2 퍼널 라우팅 (4-화면 + 단계 진행 헤더)
   globals.css
   api/
-    youtube-scan/route.js           # YouTube 스캔 Route Handler (서버)
+    youtube-scan/route.js           # YouTube 스캔 Route Handler
     naver-trend/route.js            # 네이버 검색어 트렌드 Route Handler
     naver-shopping/route.js         # 네이버 쇼핑 인사이트 Route Handler
     claude-analyze/route.js         # Claude AI 분석 Route Handler (POST)
 lib/
   data.js                           # 카테고리 데이터 + 계산 유틸 (kw, naverCid 포함)
   ai-cache.js                       # localStorage 캐시 접근 헬퍼 (4개 캐시 통합)
+  scan-all.js                       # 일괄 스캔 파이프라인 (체크박스 선택형)
   api/
     youtube.js                      # YouTube Data API v3 클라이언트
     naver.js                        # 네이버 검색어 트렌드 클라이언트
     naver-shopping.js               # 네이버 쇼핑 인사이트 클라이언트
     claude.js                       # Anthropic Claude Messages API 클라이언트
 components/
-  Framework.jsx                     # 프레임워크 뷰
-  Matrix.jsx                        # 매트릭스 뷰 (ScatterChart + AI 점수 배지)
-  Detail.jsx                        # 상세 분석 뷰 (RadarChart + 🤖 AI 분석 4섹션)
-  GlobalScan.jsx                    # 글로벌 스캔 뷰 (US vs KR BarChart)
-  KoreaScan.jsx                     # 한국 수요 탭 컨테이너
-  KoreaSearchTrend.jsx              # ↳ 검색 트렌드 패널 (12M LineChart + MoM)
-  KoreaShoppingInsight.jsx          # ↳ 쇼핑 인사이트 패널 (시계열 + 성별/연령/기기)
-  AIAnalysis.jsx                    # 🤖 AI 분석 엔진 패널 (매트릭스 상단)
+  StepProgress.jsx                  # 4단계 퍼널 진행 헤더 (• > • > ○ > ○)
+  OpportunityExplore.jsx            # 화면 1: 기회 탐색
+  OpportunityVerify.jsx             # 화면 2: 기회 검증
+  BusinessReview.jsx                # 화면 3: 사업 심사 (GO/NO-GO)
+  ExecutionPlan.jsx                 # 화면 4: 실행 계획
+  DataUpdate.jsx                    # 데이터 업데이트 패널 (탐색 화면 내장)
+  _legacy/                          # v1 컴포넌트 보존 (Phase 2 완료 시 삭제 예정)
 ```
 
 ## 글로벌 스캔 (Phase 2)
