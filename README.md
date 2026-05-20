@@ -9,17 +9,20 @@
 - Next.js 14 (App Router)
 - React 18 + Recharts
 - YouTube Data API v3 (Phase 2)
+- 네이버 데이터랩 통합검색어 트렌드 API (Phase 2)
 - Vercel 배포
 
 ## 환경 변수
 
 ```bash
 cp .env.example .env.local
-# .env.local 의 YOUTUBE_API_KEY 값을 Google Cloud Console 발급 키로 교체
+# .env.local 의 키들을 발급받은 실제 값으로 교체
 ```
 
-- **YOUTUBE_API_KEY** — Google Cloud Console → APIs & Services → Library 에서 "YouTube Data API v3" 활성화 → Credentials → API Key 생성. 운영(Vercel)에서는 Project Settings → Environment Variables 에 동일한 키로 추가하고 재배포.
-- 키는 **서버 사이드 라우트**(`app/api/youtube-scan/route.js`)에서만 사용되므로 브라우저로 노출되지 않습니다.
+- **YOUTUBE_API_KEY** — Google Cloud Console → APIs & Services → Library 에서 "YouTube Data API v3" 활성화 → Credentials → API Key 생성.
+- **NAVER_CLIENT_ID / NAVER_CLIENT_SECRET** — https://developers.naver.com/apps → 애플리케이션 등록 → "데이터랩(검색어 트렌드)" 사용 API 추가 후 발급.
+- 운영(Vercel)에서는 Project Settings → Environment Variables 에 동일한 키들로 추가하고 재배포.
+- 모든 키는 **서버 사이드 Route Handler**에서만 사용되므로 브라우저로 노출되지 않습니다.
 
 ## 로컬 실행
 
@@ -46,15 +49,18 @@ app/
   globals.css
   api/
     youtube-scan/route.js           # YouTube 스캔 Route Handler (서버)
+    naver-trend/route.js            # 네이버 데이터랩 Route Handler (서버)
 lib/
   data.js                           # 카테고리 데이터 + 계산 유틸 (kw 포함)
   api/
     youtube.js                      # YouTube Data API v3 클라이언트
+    naver.js                        # 네이버 데이터랩 트렌드 클라이언트
 components/
   Framework.jsx                     # 프레임워크 뷰
   Matrix.jsx                        # 매트릭스 뷰 (ScatterChart)
   Detail.jsx                        # 상세 분석 뷰 (RadarChart)
   GlobalScan.jsx                    # 글로벌 스캔 뷰 (US vs KR BarChart)
+  KoreaScan.jsx                     # 한국 수요 스캔 뷰 (12개월 LineChart + MoM)
 ```
 
 ## 글로벌 스캔 (Phase 2)
@@ -65,5 +71,14 @@ components/
 - **호출 시점**: 사용자가 "글로벌 스캔" 탭에서 버튼을 누를 때만 (자동 호출 없음).
 - **결과 캐싱**: 브라우저 `localStorage` 에 저장 — 페이지 재방문 시 마지막 결과를 즉시 표시, "다시 스캔" 클릭 시 재호출.
 - **블루오션 판정**: `US 영상 ≥ 50` AND `US/KR 비율 ≥ 3x` 인 카테고리를 자동 하이라이트.
+
+## 한국 수요 스캔 (Phase 2)
+
+`/api/naver-trend` 는 네이버 데이터랩 통합검색어 트렌드 API 로 각 카테고리 KR 키워드의 최근 12개월 검색량 추이를 가져옵니다.
+
+- **호출 구조**: 데이터랩은 1요청당 keywordGroups 최대 5개 → 17 카테고리는 4배치(5+5+5+2)로 분할 호출.
+- **응답 ratio**: 요청 내 최대값을 100으로 환산한 **상대값** (배치 간 절대 비교 불가). 동일 카테고리 내 시계열 추이와 MoM 증감률만 의미 있음.
+- **자동 하이라이트**: 전월 대비 ±20% 이상이면 📈 급상승 / 📉 하락으로 표시.
+- **호출 시점 / 캐싱**: 글로벌 스캔과 동일 — 사용자가 "한국 수요" 탭에서 버튼 클릭 시에만, 결과는 `localStorage`.
 
 자세한 설계/로드맵은 [GUIDE.md](./GUIDE.md) 참고.
