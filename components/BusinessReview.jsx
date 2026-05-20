@@ -30,6 +30,8 @@ import {
   explainConfidence,
   classifyRisks,
 } from "@/lib/business";
+import CreatorMatch from "./CreatorMatch";
+import { loadJson, CACHE_KEYS, getNaverShoppingForId } from "@/lib/ai-cache";
 
 function aiScoreColor(score) {
   if (score == null) return "#9CA3AF";
@@ -49,6 +51,7 @@ function gateInfo(level) {
 
 export default function BusinessReview({ cat, onNext, onBack }) {
   const [ai, setAi] = useState(null);
+  const [naverShopping, setNaverShopping] = useState(null);
   const [ue, setUe] = useState(null); // 사용자 입력 Unit Economics
   const [exit, setExit] = useState({ initialBudget: 5000000, exitMonths: 6, exitMinUnits: 100, maxLoss: 5000000 });
 
@@ -56,6 +59,7 @@ export default function BusinessReview({ cat, onNext, onBack }) {
   useEffect(() => {
     if (!cat) return;
     setAi(getClaudeAnalysisForId(loadClaudeAnalysisMap(), cat.id)?.analysis || null);
+    setNaverShopping(getNaverShoppingForId(loadJson(CACHE_KEYS.naverShopping), cat.id));
 
     const map = JSON.parse(typeof window !== "undefined" ? window.localStorage.getItem("market-scouter:business-input:v1") || "{}" : "{}");
     const saved = map[String(cat.id)];
@@ -430,6 +434,11 @@ export default function BusinessReview({ cat, onNext, onBack }) {
           </div>
         </Section>
       )}
+
+      {/* 크리에이터 자동 매칭 (YouTube + Claude 브리프) */}
+      <Section title="🎬 크리에이터 자동 매칭 (YouTube + Claude 브리프)">
+        <CreatorMatch cat={cat} ai={ai} naverShopping={naverShopping} />
+      </Section>
 
       {((cat.partners || []).length > 0 || ai?.partnerStrategy) && (
         <Section title="🤝 파트너 & 협업 전략">
