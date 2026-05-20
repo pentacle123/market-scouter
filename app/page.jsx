@@ -4,11 +4,13 @@ import { useState } from "react";
 import Framework from "@/components/Framework";
 import Matrix from "@/components/Matrix";
 import Detail from "@/components/Detail";
+import GlobalScan from "@/components/GlobalScan";
 
 const NAV = [
   { id: "fw", l: "프레임워크" },
   { id: "mx", l: "매트릭스" },
   { id: "dt", l: "상세 분석" },
+  { id: "gs", l: "글로벌 스캔" },
 ];
 
 export default function App() {
@@ -42,6 +44,7 @@ export default function App() {
         {view === "fw" && <Framework onNext={function () { setView("mx"); }} />}
         {view === "mx" && <Matrix onPick={pick} />}
         {view === "dt" && <Detail cat={cat} onBack={function () { setView("mx"); }} />}
+        {view === "gs" && <GlobalScan />}
       </div>
     </div>
   );
