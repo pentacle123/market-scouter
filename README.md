@@ -9,7 +9,8 @@
 - Next.js 14 (App Router)
 - React 18 + Recharts
 - YouTube Data API v3 (Phase 2)
-- 네이버 데이터랩 통합검색어 트렌드 API (Phase 2)
+- 네이버 데이터랩 통합검색어 트렌드 + 쇼핑 인사이트 API (Phase 2)
+- Anthropic Claude Sonnet 4 — AI 분석 엔진 (Phase 3)
 - Vercel 배포
 
 ## 환경 변수
@@ -20,7 +21,8 @@ cp .env.example .env.local
 ```
 
 - **YOUTUBE_API_KEY** — Google Cloud Console → APIs & Services → Library 에서 "YouTube Data API v3" 활성화 → Credentials → API Key 생성.
-- **NAVER_CLIENT_ID / NAVER_CLIENT_SECRET** — https://developers.naver.com/apps → 애플리케이션 등록 → "데이터랩(검색어 트렌드)" 사용 API 추가 후 발급.
+- **NAVER_CLIENT_ID / NAVER_CLIENT_SECRET** — https://developers.naver.com/apps → 애플리케이션 등록 → "데이터랩(검색어 트렌드)" 사용 API 추가 후 발급. (쇼핑 인사이트도 동일 자격증명 사용)
+- **ANTHROPIC_API_KEY** — https://console.anthropic.com/settings/keys 에서 발급.
 - 운영(Vercel)에서는 Project Settings → Environment Variables 에 동일한 키들로 추가하고 재배포.
 - 모든 키는 **서버 사이드 Route Handler**에서만 사용되므로 브라우저로 노출되지 않습니다.
 
@@ -51,20 +53,24 @@ app/
     youtube-scan/route.js           # YouTube 스캔 Route Handler (서버)
     naver-trend/route.js            # 네이버 검색어 트렌드 Route Handler
     naver-shopping/route.js         # 네이버 쇼핑 인사이트 Route Handler
+    claude-analyze/route.js         # Claude AI 분석 Route Handler (POST)
 lib/
   data.js                           # 카테고리 데이터 + 계산 유틸 (kw, naverCid 포함)
+  ai-cache.js                       # localStorage 캐시 접근 헬퍼 (4개 캐시 통합)
   api/
     youtube.js                      # YouTube Data API v3 클라이언트
     naver.js                        # 네이버 검색어 트렌드 클라이언트
     naver-shopping.js               # 네이버 쇼핑 인사이트 클라이언트
+    claude.js                       # Anthropic Claude Messages API 클라이언트
 components/
   Framework.jsx                     # 프레임워크 뷰
-  Matrix.jsx                        # 매트릭스 뷰 (ScatterChart)
-  Detail.jsx                        # 상세 분석 뷰 (RadarChart)
+  Matrix.jsx                        # 매트릭스 뷰 (ScatterChart + AI 점수 배지)
+  Detail.jsx                        # 상세 분석 뷰 (RadarChart + 🤖 AI 분석 4섹션)
   GlobalScan.jsx                    # 글로벌 스캔 뷰 (US vs KR BarChart)
   KoreaScan.jsx                     # 한국 수요 탭 컨테이너
   KoreaSearchTrend.jsx              # ↳ 검색 트렌드 패널 (12M LineChart + MoM)
   KoreaShoppingInsight.jsx          # ↳ 쇼핑 인사이트 패널 (시계열 + 성별/연령/기기)
+  AIAnalysis.jsx                    # 🤖 AI 분석 엔진 패널 (매트릭스 상단)
 ```
 
 ## 글로벌 스캔 (Phase 2)
@@ -100,5 +106,21 @@ components/
   - 1회 전체 스캔 ≈ 4 (시계열) + 11×3 (분포) = **37 호출**.
 - **분포 추출**: 부분월 제외, 가장 최근 완료월의 ratio 를 성별/연령/기기 바 차트로 시각화.
 - **세부 매핑 정제**: 현재는 광역 매핑이라 특정 제품 단위 시그널은 노이즈가 큼. `datalab.naver.com/shoppingInsight/` 에서 sub-cid 확인 후 `data.js`의 `naverCid` 정제 권장.
+
+## AI 분석 엔진 (Phase 3)
+
+`/api/claude-analyze` (POST) 는 카테고리 한 개와 그에 매칭된 YouTube/네이버 스캔 결과를 받아 Claude Sonnet 4 로 4가지 분석을 한 번의 호출로 생성합니다.
+
+- **사전 조건**: 글로벌 스캔(YouTube) + 검색 트렌드(네이버) 캐시가 localStorage 에 있어야 합니다. 쇼핑 인사이트는 선택.
+- **모델/토큰**: `claude-sonnet-4-20250514`, `max_tokens=1000`. 단가 input $3 / output $15 per 1M tokens 기준 1 카테고리당 약 $0.019, 17개 전체 ≈ **$0.32 (약 ₩440)**.
+- **시스템 프롬프트**: Pentacle 사업 컨텍스트(광고대행사 × 숏폼 발견 커머스 × 크리에이터 어필리에이트 첫 진입) 주입. JSON 스키마 강제, 코드 펜스 금지, 텍스트 필드 80자 이내 제약.
+- **응답 4섹션** (단일 JSON으로):
+  1. **competition** — 경쟁 강도 점수 + 주요 플레이어 + 가격대 + 진입 장벽 (Layer 3 보강).
+  2. **pains** — 소비자 불만 최대 3건 + 심각도 + 제품 개발 방향 + 추천 스펙 (Layer 4 자동화).
+  3. **viral** — 숏폼 적합도 점수 + 3초 데모 가능성 + 크리에이터 적합도 + 적정 가격 + 숏폼 컨셉 3개 (Layer 5 보강).
+  4. **verdict** — 종합 진입 점수 + 한줄 판단 + 근거 + 다음 액션.
+- **호출 패턴**: 매트릭스 뷰의 "🤖 AI 분석 엔진" 패널에서 "전체 분석" 또는 "미분석만"을 누르면 17개 카테고리를 **순차적으로** 호출합니다 (Vercel maxDuration 60s 제약 회피 + 진행률 표시 + 중간 실패 시 다음 카테고리로 진행).
+- **캐싱**: localStorage `market-scouter:claude-analysis:v1` 에 categoryId → 분석 맵 저장. 각 카테고리 완료 즉시 저장하여 도중 중단되어도 결과 보존.
+- **UI 통합**: 매트릭스 카테고리 카드 우측에 verdict.score 배지(🤖 87), 상세 분석 뷰 하단에 4섹션 풀 렌더링.
 
 자세한 설계/로드맵은 [GUIDE.md](./GUIDE.md) 참고.
