@@ -31,7 +31,13 @@ import {
   classifyRisks,
 } from "@/lib/business";
 import CreatorMatch from "./CreatorMatch";
-import { loadJson, CACHE_KEYS, getNaverShoppingForId } from "@/lib/ai-cache";
+import {
+  loadJson,
+  CACHE_KEYS,
+  getNaverShoppingForId,
+  loadReviewsMap,
+  getReviewForId,
+} from "@/lib/ai-cache";
 
 function aiScoreColor(score) {
   if (score == null) return "#9CA3AF";
@@ -52,6 +58,7 @@ function gateInfo(level) {
 export default function BusinessReview({ cat, onNext, onBack }) {
   const [ai, setAi] = useState(null);
   const [naverShopping, setNaverShopping] = useState(null);
+  const [review, setReview] = useState(null);
   const [ue, setUe] = useState(null); // 사용자 입력 Unit Economics
   const [exit, setExit] = useState({ initialBudget: 5000000, exitMonths: 6, exitMinUnits: 100, maxLoss: 5000000 });
 
@@ -60,6 +67,7 @@ export default function BusinessReview({ cat, onNext, onBack }) {
     if (!cat) return;
     setAi(getClaudeAnalysisForId(loadClaudeAnalysisMap(), cat.id)?.analysis || null);
     setNaverShopping(getNaverShoppingForId(loadJson(CACHE_KEYS.naverShopping), cat.id));
+    setReview(getReviewForId(loadReviewsMap(), cat.id));
 
     const map = JSON.parse(typeof window !== "undefined" ? window.localStorage.getItem("market-scouter:business-input:v1") || "{}" : "{}");
     const saved = map[String(cat.id)];
@@ -377,6 +385,11 @@ export default function BusinessReview({ cat, onNext, onBack }) {
       {/* Exit 기준 + 최대 손실 */}
       <Section title="🚪 Exit 기준 + 최대 손실">
         <ExitRiskForm cat={cat} value={exit} onChange={setExit} hideRisks />
+      </Section>
+
+      {/* 제품 인텔리전스 — 리뷰 데이터 있으면 우선, 없으면 GUIDE/Claude pains */}
+      <Section title="🔧 제품 인텔리전스 (소비자 불만 → 제품 스펙)">
+        <ProductIntelligence cat={cat} ai={ai} review={review} />
       </Section>
 
       {/* 제품 인텔리전스 / 파트너 / 마케팅 — Phase 1 BusinessReview 의 핵심부만 압축 보존 */}
@@ -789,6 +802,258 @@ function ExitRiskForm({ cat, value, onChange, hideRisks }) {
               );
             })}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 제품 인텔리전스 (리뷰 우선 → Claude pains → GUIDE pains) ─────────────────
+function ProductIntelligence({ cat, ai, review }) {
+  const reviewComplaints = review?.analysis?.complaints || [];
+  const claudePains = ai?.pains || [];
+  const guidePains = cat?.pains || [];
+
+  const hasReview = reviewComplaints.length > 0;
+  const hasClaude = claudePains.length > 0;
+  const hasGuide = guidePains.length > 0;
+
+  if (!hasReview && !hasClaude && !hasGuide) {
+    return (
+      <div
+        style={{
+          padding: "10px 12px",
+          background: "#F9FAFB",
+          border: "1px dashed #E5E7EB",
+          borderRadius: 6,
+          fontSize: 11,
+          color: "#888",
+          lineHeight: 1.6,
+        }}
+      >
+        소비자 불만 데이터 없음. 화면 2 (검증) 의 L4 카드에서 "📝 리뷰 분석" 을 실행하면
+        실제 네이버 블로그 30건 기반 불만이 자동으로 채워집니다.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* 데이터 소스 뱃지 */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 6, flexWrap: "wrap" }}>
+        {hasReview && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#fff",
+              background: "#DC2626",
+              borderRadius: 99,
+              padding: "2px 9px",
+            }}
+            title={`네이버 블로그 ${review.blogCount}건 기반${review.isSubstitute ? " (대체재 분석)" : ""}`}
+          >
+            📝 실제 리뷰 {review.blogCount}건 기반
+            {review.isSubstitute ? ` · 대체재 "${review.substituteName}"` : ""}
+          </span>
+        )}
+        {hasClaude && !hasReview && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#fff",
+              background: "#7C3AED",
+              borderRadius: 99,
+              padding: "2px 9px",
+            }}
+          >
+            🤖 Claude 추정
+          </span>
+        )}
+        {hasGuide && !hasReview && !hasClaude && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              color: "#666",
+              background: "#F3F4F6",
+              border: "1px solid #E5E7EB",
+              borderRadius: 99,
+              padding: "2px 9px",
+            }}
+          >
+            GUIDE 시드
+          </span>
+        )}
+        {hasReview && (
+          <span
+            style={{
+              fontSize: 9.5,
+              color: "#666",
+              padding: "2px 8px",
+              alignSelf: "center",
+            }}
+          >
+            신뢰도: 실제 한국 소비자 리뷰 (Claude/GUIDE 추정 대체)
+          </span>
+        )}
+      </div>
+
+      {/* 우선순위: 리뷰 > Claude > GUIDE */}
+      {hasReview ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {reviewComplaints.map((c, i) => (
+            <ReviewComplaintCard key={i} c={c} idx={i} />
+          ))}
+          {review.analysis?.insight && (
+            <div
+              style={{
+                marginTop: 4,
+                padding: "8px 10px",
+                background: "#FFFBEB",
+                border: "1px solid #FDE68A",
+                borderRadius: 6,
+                fontSize: 11,
+                color: "#92400E",
+                lineHeight: 1.6,
+              }}
+            >
+              <b>💡 종합 인사이트:</b> {review.analysis.insight}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {claudePains.map((p, i) => (
+            <div
+              key={"ai" + i}
+              style={{
+                padding: "9px 11px",
+                background: "#fff",
+                border: "1px solid #E5E7EB",
+                borderRadius: 6,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                <span
+                  style={{
+                    background: p.severity >= 85 ? "#EF4444" : "#F59E0B",
+                    borderRadius: 99,
+                    padding: "1px 7px",
+                    fontSize: 10,
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
+                  {p.severity}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: "#222" }}>{p.issue}</span>
+              </div>
+              {p.devDirection && (
+                <div style={{ fontSize: 10.5, color: "#059669", marginBottom: 2 }}>
+                  💡 {p.devDirection}
+                </div>
+              )}
+              {p.spec && <div style={{ fontSize: 10.5, color: "#2563EB" }}>📋 {p.spec}</div>}
+            </div>
+          ))}
+          {!hasClaude &&
+            guidePains.map((p, i) => (
+              <div
+                key={"gp" + i}
+                style={{
+                  padding: "9px 11px",
+                  background: "#F9FAFB",
+                  border: "1px solid #E5E7EB",
+                  borderRadius: 6,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                  <span
+                    style={{
+                      background: p.s >= 85 ? "#EF4444" : "#F59E0B",
+                      borderRadius: 99,
+                      padding: "1px 7px",
+                      fontSize: 10,
+                      color: "#fff",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {p.s}
+                  </span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#222" }}>{p.i}</span>
+                </div>
+                {p.ev && <div style={{ fontSize: 10.5, color: "#6366F1" }}>🔍 {p.ev}</div>}
+                {p.dv && <div style={{ fontSize: 10.5, color: "#059669" }}>💡 {p.dv}</div>}
+                {p.sp && <div style={{ fontSize: 10.5, color: "#2563EB" }}>📋 {p.sp}</div>}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReviewComplaintCard({ c, idx }) {
+  const sev = c.severity ?? 0;
+  const color = sev >= 80 ? "#DC2626" : sev >= 60 ? "#F59E0B" : sev >= 40 ? "#D97706" : "#6B7280";
+  return (
+    <div
+      style={{
+        padding: "9px 11px",
+        background: idx === 0 ? "#FEF2F2" : "#fff",
+        border: idx === 0 ? "1px solid #FECACA" : "1px solid #E5E7EB",
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 6,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+        <span
+          style={{
+            background: color,
+            borderRadius: 99,
+            padding: "1px 7px",
+            fontSize: 10,
+            color: "#fff",
+            fontWeight: 700,
+          }}
+        >
+          {sev}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#222", flex: 1 }}>{c.issue}</span>
+        {c.frequency && (
+          <span style={{ fontSize: 9.5, color: "#888" }}>{c.frequency}</span>
+        )}
+      </div>
+      {Array.isArray(c.quotes) && c.quotes.length > 0 && (
+        <div style={{ marginTop: 3, marginBottom: 3 }}>
+          {c.quotes.slice(0, 2).map((q, j) => (
+            <div
+              key={j}
+              style={{
+                fontSize: 10,
+                color: "#666",
+                lineHeight: 1.5,
+                fontStyle: "italic",
+                paddingLeft: 8,
+                borderLeft: "2px solid #E5E7EB",
+                marginBottom: 2,
+              }}
+            >
+              "{q}"
+            </div>
+          ))}
+        </div>
+      )}
+      {c.productDirection && (
+        <div style={{ fontSize: 10.5, color: "#059669", marginTop: 2 }}>
+          💡 {c.productDirection}
+        </div>
+      )}
+      {c.recommendedSpec && (
+        <div style={{ fontSize: 10.5, color: "#2563EB", marginTop: 1 }}>
+          📋 {c.recommendedSpec}
         </div>
       )}
     </div>

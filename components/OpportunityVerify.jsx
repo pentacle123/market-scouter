@@ -39,6 +39,7 @@ import {
   getGoogleTrendsForId,
   setGoogleTrendsForId,
 } from "@/lib/ai-cache";
+import ReviewAnalysis from "./ReviewAnalysis";
 
 function aiScoreColor(score) {
   if (score == null) return "#9CA3AF";
@@ -298,6 +299,12 @@ export default function OpportunityVerify({ cat, onNext, onBack }) {
                 >
                   <span style={{ color: "#7C3AED", fontWeight: 700, marginRight: 4 }}>🤖</span>
                   {ai.layerDetails[k]}
+                </div>
+              )}
+              {/* L4 (소비자 불만) 카드에 실제 리뷰 분석 트리거 추가 */}
+              {i === 3 && (
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #F3F4F6" }}>
+                  <ReviewAnalysis cat={c} layout="full" />
                 </div>
               )}
               {/* 실시간 데이터 보강 */}
