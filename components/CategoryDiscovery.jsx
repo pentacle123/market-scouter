@@ -1,78 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { D, TL, TC, TB, TBR } from "@/lib/data";
+import {
+  D,
+  TL,
+  TC,
+  TB,
+  TBR,
+  buildCustomFromDiscovery,
+  addCustomCategory,
+  loadCustomCategories,
+  exportCustomsAsCode,
+  removeCustomCategory,
+} from "@/lib/data";
 import { CACHE_KEYS, loadJson, saveJson } from "@/lib/ai-cache";
-
-const EXISTING_IDS = D.map((c) => c.id).sort((a, b) => a - b);
-
-function nextAvailableId(type) {
-  // type 별 ID 영역: blue 1-9, gap 10-19, cond 20-29, no 30-39
-  const range = {
-    blue: [1, 9],
-    gap: [10, 19],
-    cond: [20, 29],
-    no: [30, 39],
-  }[type] || [40, 99];
-  const used = new Set(EXISTING_IDS);
-  for (let i = range[0]; i <= range[1]; i++) {
-    if (!used.has(i)) return i;
-  }
-  // 영역이 가득 찼으면 40+ 에서 빈 자리
-  let i = 40;
-  while (used.has(i)) i++;
-  return i;
-}
 
 function fmtDateTime(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
   const p = (x) => String(x).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-function buildDataJsTemplate(discovery) {
-  // 기존 30개 ID 영역에 맞춰 ID 자동 부여
-  const id = nextAvailableId(discovery.estimatedType);
-  const baseScores =
-    discovery.estimatedType === "blue"
-      ? { L1: 80, L2: 55, L3: 85, L4: 75, L5: 75, L6: 70 }
-      : discovery.estimatedType === "gap"
-        ? { L1: 80, L2: 75, L3: 60, L4: 75, L5: 78, L6: 75 }
-        : { L1: 75, L2: 75, L3: 65, L4: 72, L5: 75, L6: 72 };
-
-  return {
-    id,
-    n: discovery.name,
-    e: "🆕",
-    mk: "추정",
-    lc: "도입기",
-    type: discovery.estimatedType,
-    kw: { US: discovery.keyword, KR: discovery.name },
-    naverCid: null,
-    ...baseScores,
-    verdict: discovery.reasoning?.slice(0, 80) || `${discovery.nameEn} 신규 발굴 카테고리`,
-    why: discovery.reasoning || "",
-    layers: {
-      L1: `US YouTube 발견 · 평균 조회 ${(discovery.avgViews || 0).toLocaleString()}`,
-      L2: "네이버 검색 트렌드 미수집 (Phase 2 스캔 필요)",
-      L3: `${TL[discovery.estimatedType]} 추정`,
-      L4: "소비자 불만 미수집",
-      L5: "발견 영상 기반 — 추가 분석 필요",
-      L6: "OEM/파트너 미조사",
-    },
-    pains: [],
-    rev: { cost: "-", price: "-", margin: "-", bep: "-", note: "-" },
-    ttm: "-",
-    risks: ["신규 발굴 — 시장 검증 필요"],
-    partners: [],
-    expand: [],
-  };
-}
-
-function formatAsJsObjectLiteral(obj) {
-  // data.js 의 한 줄 객체 형식으로 변환 (eslint 친화 + 기존 데이터와 동일 형식)
-  return JSON.stringify(obj, null, 2);
 }
 
 const TYPE_BADGE = {
@@ -85,9 +32,21 @@ export default function CategoryDiscovery() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [customs, setCustoms] = useState([]);
+  const [showExport, setShowExport] = useState(false);
+
+  function reloadCustoms() {
+    setCustoms(loadCustomCategories());
+  }
 
   useEffect(() => {
     setData(loadJson(CACHE_KEYS.discoveries));
+    reloadCustoms();
+    const handler = () => reloadCustoms();
+    if (typeof window !== "undefined") {
+      window.addEventListener("market-scouter:customs-changed", handler);
+      return () => window.removeEventListener("market-scouter:customs-changed", handler);
+    }
   }, []);
 
   async function run(force = false) {
@@ -235,9 +194,50 @@ export default function CategoryDiscovery() {
       {discoveriesCount > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
           {data.discoveries.map((d, i) => (
-            <DiscoveryCard key={i} discovery={d} />
+            <DiscoveryCard key={i} discovery={d} customs={customs} />
           ))}
         </div>
+      )}
+
+      {/* 정식 등록용 코드 내보내기 */}
+      {customs.length > 0 && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "8px 10px",
+            background: "#fff",
+            border: "1px solid #FED7AA",
+            borderRadius: 6,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 11, color: "#9A3412" }}>
+            🆕 사용자 추가 카테고리{" "}
+            <b>{customs.length}개</b> · localStorage 보관 중
+          </span>
+          <button
+            onClick={() => setShowExport((v) => !v)}
+            style={{
+              padding: "4px 10px",
+              fontSize: 10.5,
+              fontWeight: 700,
+              background: showExport ? "#9A3412" : "#fff",
+              color: showExport ? "#fff" : "#9A3412",
+              border: "1px solid #9A3412",
+              borderRadius: 4,
+              cursor: "pointer",
+              marginLeft: "auto",
+            }}
+          >
+            {showExport ? "▲ 닫기" : "📋 정식 등록용 코드 내보내기"}
+          </button>
+        </div>
+      )}
+      {showExport && (
+        <ExportPanel customs={customs} onChange={reloadCustoms} />
       )}
 
       {data && discoveriesCount === 0 && !error && (
@@ -264,24 +264,26 @@ export default function CategoryDiscovery() {
   );
 }
 
-function DiscoveryCard({ discovery }) {
-  const [copied, setCopied] = useState(false);
+function DiscoveryCard({ discovery, customs }) {
   const badge = TYPE_BADGE[discovery.estimatedType] || TYPE_BADGE.cond;
+  // 이름 기준 이미 추가됐는지 검사
+  const isAlreadyAdded = customs.some(
+    (c) => c.n === discovery.name || c.kw?.US === discovery.keyword
+  );
+  const [justAdded, setJustAdded] = useState(false);
 
-  function copyTemplate() {
-    const obj = buildDataJsTemplate(discovery);
-    const text = formatAsJsObjectLiteral(obj);
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2500);
-      })
-      .catch(() => {
-        // fallback — alert with text
-        window.prompt("클립보드 복사 실패. Ctrl+C 로 직접 복사하세요:", text);
-      });
+  function addToOpportunities() {
+    const newCat = buildCustomFromDiscovery(discovery);
+    const result = addCustomCategory(newCat);
+    if (result.added) {
+      setJustAdded(true);
+    } else {
+      // 이미 있다는 안내 — 토스트 대신 간단히 alert
+      alert(result.reason || "이미 추가된 카테고리입니다.");
+    }
   }
+
+  const added = isAlreadyAdded || justAdded;
 
   return (
     <div
@@ -367,19 +369,21 @@ function DiscoveryCard({ discovery }) {
       )}
       <div style={{ display: "flex", gap: 4 }}>
         <button
-          onClick={copyTemplate}
+          onClick={addToOpportunities}
+          disabled={added}
+          title={added ? "이미 매트릭스 목록에 있습니다" : "사용자 추가 카테고리로 즉시 매트릭스에 등장"}
           style={{
             padding: "4px 10px",
             fontSize: 10.5,
             fontWeight: 700,
-            background: copied ? "#10B981" : "#fff",
-            color: copied ? "#fff" : badge.color,
-            border: `1px solid ${badge.color}`,
+            background: added ? "#10B981" : badge.color,
+            color: "#fff",
+            border: "none",
             borderRadius: 4,
-            cursor: "pointer",
+            cursor: added ? "default" : "pointer",
           }}
         >
-          {copied ? "✓ 복사됨" : "📋 data.js 형식 복사"}
+          {added ? "✅ 추가됨" : "✅ 기회 목록에 추가"}
         </button>
         <a
           href={`https://www.youtube.com/results?search_query=${encodeURIComponent(discovery.keyword)}&sp=EgIYAg%253D%253D`}
@@ -400,6 +404,95 @@ function DiscoveryCard({ discovery }) {
           🔗 YouTube 검색 결과 보기
         </a>
       </div>
+    </div>
+  );
+}
+
+// ─── 정식 등록용 코드 내보내기 패널 ──────────────────────────────────────────
+function ExportPanel({ customs, onChange }) {
+  const code = exportCustomsAsCode();
+  const [copied, setCopied] = useState(false);
+  function copyAll() {
+    navigator.clipboard
+      .writeText(code)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      })
+      .catch(() => window.prompt("클립보드 복사 실패. Ctrl+C 로 복사하세요:", code));
+  }
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        padding: "10px 12px",
+        background: "#fff",
+        border: "1px solid #FED7AA",
+        borderRadius: 6,
+      }}
+    >
+      <div style={{ fontSize: 11, color: "#7C2D12", marginBottom: 6, lineHeight: 1.6 }}>
+        아래 코드를 <code>lib/data.js</code> 의 D 배열 마지막 <code>];</code> 직전에 붙여넣고
+        커밋·배포하면, 모든 사용자에게 동일 카테고리가 노출됩니다 (localStorage 의존 해소).
+      </div>
+      <div style={{ display: "flex", gap: 4, marginBottom: 6, flexWrap: "wrap" }}>
+        <button
+          onClick={copyAll}
+          style={{
+            padding: "4px 10px",
+            fontSize: 10.5,
+            fontWeight: 700,
+            background: copied ? "#10B981" : "#9A3412",
+            color: "#fff",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
+          {copied ? "✓ 복사됨" : "📋 전체 코드 클립보드 복사"}
+        </button>
+        {customs.map((c) => (
+          <button
+            key={c.id}
+            onClick={() => {
+              if (confirm(`"${c.n}" 을 사용자 목록에서 제거할까요?`)) {
+                removeCustomCategory(c.id);
+                if (onChange) onChange();
+              }
+            }}
+            title={`#${c.id} ${c.n} 제거`}
+            style={{
+              padding: "3px 9px",
+              fontSize: 10,
+              background: "#FFFBEB",
+              color: "#92400E",
+              border: "1px solid #FDE68A",
+              borderRadius: 4,
+              cursor: "pointer",
+            }}
+          >
+            🗑️ #{c.id} {c.n.length > 10 ? c.n.slice(0, 10) + "…" : c.n}
+          </button>
+        ))}
+      </div>
+      <pre
+        style={{
+          fontSize: 9.5,
+          background: "#F9FAFB",
+          border: "1px solid #E5E7EB",
+          borderRadius: 4,
+          padding: 8,
+          maxHeight: 240,
+          overflow: "auto",
+          margin: 0,
+          color: "#374151",
+          lineHeight: 1.5,
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-all",
+        }}
+      >
+        {code}
+      </pre>
     </div>
   );
 }

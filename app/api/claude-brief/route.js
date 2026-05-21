@@ -110,8 +110,13 @@ export async function POST(req) {
   } catch {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
-  const { categoryId, creator, ai, naverShopping } = body || {};
-  const cat = D.find((c) => c.id === categoryId);
+  const { categoryId, category: customCat, creator, ai, naverShopping } = body || {};
+  let cat;
+  if (categoryId >= 1000 && customCat && customCat.id === categoryId) {
+    cat = customCat;
+  } else {
+    cat = D.find((c) => c.id === categoryId);
+  }
   if (!cat) return Response.json({ error: `category ${categoryId} not found` }, { status: 404 });
   if (!creator || !creator.channelId || !creator.name) {
     return Response.json({ error: "creator payload missing" }, { status: 400 });

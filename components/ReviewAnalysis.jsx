@@ -46,7 +46,17 @@ export default function ReviewAnalysis({ cat, onChange, layout = "full" }) {
     setLoading(true);
     setError(null);
     try {
-      const url = `/api/review-analysis?categoryId=${cat.id}${includeUS ? "&includeUS=true" : ""}`;
+      // 커스텀 카테고리(1000+)는 query 로 카테고리 정보 동봉
+      let url = `/api/review-analysis?categoryId=${cat.id}${includeUS ? "&includeUS=true" : ""}`;
+      if (cat.id >= 1000) {
+        const params = new URLSearchParams({
+          n: cat.n || "",
+          kwKR: cat.kw?.KR || "",
+          kwUS: cat.kw?.US || "",
+          type: cat.type || "blue",
+        });
+        url += `&${params.toString()}`;
+      }
       const res = await fetch(url, { cache: "no-store" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);

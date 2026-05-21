@@ -66,8 +66,23 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const categoryId = Number(searchParams.get("categoryId"));
   const includeUS = searchParams.get("includeUS") === "true";
+  // 커스텀 카테고리(1000+): query 로 카테고리 정보 직접 받기
+  const overrideKwKR = searchParams.get("kwKR");
+  const overrideKwUS = searchParams.get("kwUS");
+  const overrideName = searchParams.get("n");
+  const overrideType = searchParams.get("type");
 
-  const cat = D.find((c) => c.id === categoryId);
+  let cat;
+  if (categoryId >= 1000) {
+    cat = {
+      id: categoryId,
+      n: overrideName || `custom-${categoryId}`,
+      type: overrideType || "blue",
+      kw: { KR: overrideKwKR || "", US: overrideKwUS || "" },
+    };
+  } else {
+    cat = D.find((c) => c.id === categoryId);
+  }
   if (!cat) {
     return Response.json({ error: `category ${categoryId} not found` }, { status: 404 });
   }

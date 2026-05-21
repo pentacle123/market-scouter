@@ -24,8 +24,21 @@ export async function GET(req) {
   const categoryId = Number(searchParams.get("categoryId"));
   const geo = searchParams.get("geo") || "KR";
   const force = searchParams.get("force") === "true";
+  // 커스텀 카테고리(1000+)는 query 로 keyword + n 직접 전달
+  const overrideKwKR = searchParams.get("kwKR");
+  const overrideKwUS = searchParams.get("kwUS");
+  const overrideName = searchParams.get("n");
 
-  const cat = D.find((c) => c.id === categoryId);
+  let cat;
+  if (categoryId >= 1000) {
+    cat = {
+      id: categoryId,
+      n: overrideName || `custom-${categoryId}`,
+      kw: { KR: overrideKwKR || "", US: overrideKwUS || "" },
+    };
+  } else {
+    cat = D.find((c) => c.id === categoryId);
+  }
   if (!cat) {
     return Response.json({ error: `category ${categoryId} not found` }, { status: 404 });
   }

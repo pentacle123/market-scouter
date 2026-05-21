@@ -42,10 +42,22 @@ export async function POST(req) {
     return Response.json({ error: "invalid JSON body" }, { status: 400 });
   }
 
-  const { categoryId, youtube, naver, naverShopping } = body || {};
-  const cat = D.find((c) => c.id === categoryId);
+  const { categoryId, category: customCat, youtube, naver, naverShopping } = body || {};
+  // categoryId 가 1000+ 면 클라이언트가 보낸 category payload 사용 (커스텀 카테고리)
+  let cat;
+  if (categoryId >= 1000 && customCat && customCat.id === categoryId) {
+    cat = customCat;
+  } else {
+    cat = D.find((c) => c.id === categoryId);
+  }
   if (!cat) {
-    return Response.json({ error: `category ${categoryId} not found` }, { status: 404 });
+    return Response.json(
+      {
+        error: `category ${categoryId} not found`,
+        hint: categoryId >= 1000 ? "커스텀 카테고리는 body 에 category 객체를 함께 보내세요." : null,
+      },
+      { status: 404 }
+    );
   }
 
   const startedAt = Date.now();

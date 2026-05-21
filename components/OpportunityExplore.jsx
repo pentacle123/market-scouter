@@ -11,7 +11,19 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { D, LAYER_KEYS, calcXY, calcT, sig, TL, TC, TB, TBR } from "@/lib/data";
+import {
+  D,
+  LAYER_KEYS,
+  calcXY,
+  calcT,
+  sig,
+  TL,
+  TC,
+  TB,
+  TBR,
+  getAllCategories,
+  removeCustomCategory,
+} from "@/lib/data";
 import { loadClaudeAnalysisMap, getClaudeAnalysisForId } from "@/lib/ai-cache";
 import DataUpdate from "./DataUpdate";
 import CategoryDiscovery from "./CategoryDiscovery";
@@ -26,24 +38,45 @@ function aiScoreColor(score) {
 
 export default function OpportunityExplore({ onPick }) {
   const [aiMap, setAiMap] = useState({});
+  const [allCategories, setAllCategories] = useState(D);
+
+  function reloadAll() {
+    setAllCategories(getAllCategories());
+  }
+
   useEffect(() => {
     setAiMap(loadClaudeAnalysisMap());
+    reloadAll();
+    // customs 변경 이벤트 구독
+    const handler = () => reloadAll();
+    if (typeof window !== "undefined") {
+      window.addEventListener("market-scouter:customs-changed", handler);
+      return () => window.removeEventListener("market-scouter:customs-changed", handler);
+    }
   }, []);
 
+  function handleRemoveCustom(id, name) {
+    if (!confirm(`"${name}" 을 사용자 목록에서 제거할까요?`)) return;
+    removeCustomCategory(id);
+    reloadAll();
+  }
+
   const items = useMemo(() => {
-    return D.map((c) => {
-      const p = calcXY(c);
-      const total = calcT(c);
-      const ai = getClaudeAnalysisForId(aiMap, c.id);
-      return {
-        ...c,
-        ...p,
-        total,
-        aiVerdict: ai?.analysis?.verdict?.score ?? null,
-        aiOneLine: ai?.analysis?.verdict?.oneLine || null,
-      };
-    }).sort((a, b) => b.total - a.total);
-  }, [aiMap]);
+    return allCategories
+      .map((c) => {
+        const p = calcXY(c);
+        const total = calcT(c);
+        const ai = getClaudeAnalysisForId(aiMap, c.id);
+        return {
+          ...c,
+          ...p,
+          total,
+          aiVerdict: ai?.analysis?.verdict?.score ?? null,
+          aiOneLine: ai?.analysis?.verdict?.oneLine || null,
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+  }, [aiMap, allCategories]);
 
   const counts = useMemo(() => {
     const c = { blue: 0, gap: 0, cond: 0, no: 0 };
@@ -108,7 +141,7 @@ export default function OpportunityExplore({ onPick }) {
             {aiTop3.map((c) => (
               <div
                 key={c.id}
-                onClick={() => onPick(D.find((x) => x.id === c.id))}
+                onClick={() => onPick(allCategories.find((x) => x.id === c.id))}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -213,7 +246,7 @@ export default function OpportunityExplore({ onPick }) {
             <RCScatter
               data={chartData}
               onClick={(d) => {
-                const f = D.find((c) => c.id === d.id);
+                const f = allCategories.find((c) => c.id === d.id);
                 if (f) onPick(f);
               }}
             >
@@ -233,12 +266,12 @@ export default function OpportunityExplore({ onPick }) {
       </div>
 
       {/* 분류별 카테고리 리스트 — 데스크톱 4컬럼 / 태블릿 2컬럼 / 모바일 1컬럼 */}
-      <FourColumnGroups items={items} onPick={onPick} />
+      <FourColumnGroups items={items} onPick={onPick} onRemoveCustom={handleRemoveCustom} />
     </div>
   );
 }
 
-function FourColumnGroups({ items, onPick }) {
+function FourColumnGroups({ items, onPick, onRemoveCustom }) {
   return (
     <div
       style={{
@@ -249,14 +282,21 @@ function FourColumnGroups({ items, onPick }) {
       }}
     >
       {["blue", "gap", "cond", "no"].map((type) => (
-        <GroupColumn key={type} items={items} onPick={onPick} type={type} />
+        <GroupColumn
+          key={type}
+          items={items}
+          onPick={onPick}
+          onRemoveCustom={onRemoveCustom}
+          type={type}
+        />
       ))}
     </div>
   );
 }
 
-function GroupColumn({ items, onPick, type }) {
+function GroupColumn({ items, onPick, onRemoveCustom, type }) {
   const list = items.filter((c) => c.type === type);
+  const customCount = list.filter((c) => c.isCustom).length;
   return (
     <div
       style={{
@@ -280,6 +320,22 @@ function GroupColumn({ items, onPick, type }) {
         <span style={{ fontSize: 12, fontWeight: 800, color: TC[type], flex: 1, lineHeight: 1.2 }}>
           {TL[type]}
         </span>
+        {customCount > 0 && (
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              color: "#9A3412",
+              background: "#FFFBEB",
+              border: "1px solid #FDE68A",
+              borderRadius: 99,
+              padding: "1px 5px",
+            }}
+            title={`사용자 추가 ${customCount}개 포함`}
+          >
+            🆕{customCount}
+          </span>
+        )}
         <span
           style={{
             fontSize: 11,
@@ -300,7 +356,7 @@ function GroupColumn({ items, onPick, type }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {list.map((c) => (
-            <CompactCategoryCard key={c.id} c={c} onPick={onPick} />
+            <CompactCategoryCard key={c.id} c={c} onPick={onPick} onRemoveCustom={onRemoveCustom} />
           ))}
         </div>
       )}
@@ -308,17 +364,19 @@ function GroupColumn({ items, onPick, type }) {
   );
 }
 
-function CompactCategoryCard({ c, onPick }) {
+function CompactCategoryCard({ c, onPick, onRemoveCustom }) {
   const sigs = LAYER_KEYS.map((k) => sig(c[k]));
+  const isCustom = !!c.isCustom;
   return (
     <div
       onClick={() => onPick(c)}
       style={{
         padding: "6px 8px",
-        background: TB[c.type],
-        border: "1px solid " + TBR[c.type],
+        background: isCustom ? "#FFFBEB" : TB[c.type],
+        border: isCustom ? "1px dashed #F59E0B" : "1px solid " + TBR[c.type],
         borderRadius: 6,
         cursor: "pointer",
+        position: "relative",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
@@ -341,6 +399,23 @@ function CompactCategoryCard({ c, onPick }) {
         >
           {c.n}
         </span>
+        {isCustom && (
+          <span
+            style={{
+              fontSize: 8.5,
+              fontWeight: 800,
+              color: "#9A3412",
+              background: "#fff",
+              border: "1px solid #FDE68A",
+              borderRadius: 99,
+              padding: "1px 5px",
+              whiteSpace: "nowrap",
+            }}
+            title={`사용자 추가 카테고리 · 추가 시각 ${c.addedAt?.slice(0, 16) || ""}`}
+          >
+            🆕
+          </span>
+        )}
         {c.aiVerdict != null && (
           <span
             title={c.aiOneLine || ""}
@@ -372,6 +447,26 @@ function CompactCategoryCard({ c, onPick }) {
           {c.mk}
         </span>
         <span style={{ fontSize: 8, letterSpacing: 0.5 }}>{sigs.map((s) => s.l).join("")}</span>
+        {isCustom && onRemoveCustom && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemoveCustom(c.id, c.n);
+            }}
+            title="사용자 목록에서 제거"
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#999",
+              fontSize: 11,
+              cursor: "pointer",
+              padding: 0,
+              marginLeft: 2,
+            }}
+          >
+            🗑️
+          </button>
+        )}
       </div>
     </div>
   );

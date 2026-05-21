@@ -87,7 +87,16 @@ export default function CreatorMatch({ cat, ai, naverShopping }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/youtube-creators?categoryId=${cat.id}&geo=KR`, {
+      let url = `/api/youtube-creators?categoryId=${cat.id}&geo=KR`;
+      if (cat.id >= 1000) {
+        const params = new URLSearchParams({
+          n: cat.n || "",
+          kwKR: cat.kw?.KR || "",
+          kwUS: cat.kw?.US || "",
+        });
+        url += `&${params.toString()}`;
+      }
+      const res = await fetch(url, {
         cache: "no-store",
       });
       const json = await res.json();
@@ -332,6 +341,8 @@ function CreatorCard({ creator, cat, ai, naverShopping, brief: initialBrief, onB
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           categoryId: cat.id,
+          // 커스텀 카테고리는 객체 동봉
+          category: cat.id >= 1000 ? cat : undefined,
           creator,
           ai,
           naverShopping,
