@@ -106,10 +106,13 @@ export async function GET(req) {
   if (!blogResult.blogs.length) {
     return Response.json(
       {
-        error: "네이버 블로그 결과가 0건입니다. 대체재 키워드를 추가하거나 다른 카테고리를 시도하세요.",
+        error: "네이버 블로그 결과가 0건입니다. 권한 또는 키워드 문제일 수 있습니다.",
         stage: "naver",
         queries,
         baseTerm,
+        blogFailed: blogResult.failed,
+        hint:
+          "네이버 개발자센터 → 애플리케이션 상세 → 'API 설정' 에서 '검색' API 를 추가해야 합니다. 데이터랩(검색어 트렌드)·쇼핑인사이트와 별개 권한입니다.",
       },
       { status: 502 }
     );
