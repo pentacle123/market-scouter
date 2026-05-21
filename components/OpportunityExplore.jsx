@@ -14,6 +14,7 @@ import {
 import { D, LAYER_KEYS, calcXY, calcT, sig, TL, TC, TB, TBR } from "@/lib/data";
 import { loadClaudeAnalysisMap, getClaudeAnalysisForId } from "@/lib/ai-cache";
 import DataUpdate from "./DataUpdate";
+import CategoryDiscovery from "./CategoryDiscovery";
 
 function aiScoreColor(score) {
   if (score == null) return "#9CA3AF";
@@ -147,6 +148,9 @@ export default function OpportunityExplore({ onPick }) {
 
       {/* 데이터 업데이트 패널 */}
       <DataUpdate onComplete={() => setAiMap(loadClaudeAnalysisMap())} />
+
+      {/* 신규 카테고리 자동 발견 */}
+      <CategoryDiscovery />
 
       {/* 매트릭스 차트 */}
       <div
