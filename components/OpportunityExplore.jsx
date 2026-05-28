@@ -109,8 +109,11 @@ export default function OpportunityExplore({ onPick }) {
           화면 1 · 기회 탐색
         </h2>
         <p style={{ fontSize: 11, color: "#999", marginBottom: 10 }}>
-          {D.length}개 카테고리를 조망하고 검증할 후보 5~7개를 걸러냅니다
+          {allCategories.length}개 카테고리를 조망하고 검증할 후보 5~7개를 걸러냅니다
         </p>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
 
         <div
           style={{

@@ -4,14 +4,22 @@
 // - 처음에는 순차 진행 권장(잠긴 단계는 disabled로 표시)
 // - 카테고리가 한 번 선택되면 verify/review/plan 자유 이동 가능
 
-const STEPS = [
+const PRODUCT_STEPS = [
   { id: "explore", num: 1, l: "기회 탐색", desc: "어디에 기회가 있는가" },
   { id: "verify", num: 2, l: "기회 검증", desc: "이 기회가 진짜인가" },
   { id: "review", num: 3, l: "사업 심사", desc: "실행 가능하고 돈 되는가" },
   { id: "plan", num: 4, l: "실행 계획", desc: "어떻게 들어가는가" },
 ];
 
-export default function StepProgress({ current, hasCategory, onChange }) {
+const PARTNER_STEPS = [
+  { id: "discover", num: 1, l: "파트너 발굴", desc: "마케팅 부족한 회사 찾기" },
+  { id: "verify", num: 2, l: "파트너 검증", desc: "제품·갭·잠재력 분석" },
+  { id: "execute", num: 3, l: "협업 실행", desc: "메시지·계획·수익 타임라인" },
+];
+
+export default function StepProgress({ current, hasCategory, onChange, mode = "product" }) {
+  const STEPS = mode === "partner" ? PARTNER_STEPS : PRODUCT_STEPS;
+  // 파트너 모드는 hasCategory 대신 selectedPartner 가 있어야 P2·P3 이동 가능
   return (
     <div
       style={{
