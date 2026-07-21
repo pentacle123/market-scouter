@@ -9,6 +9,7 @@ import ExecutionPlan from "@/components/ExecutionPlan";
 import PartnerDiscovery from "@/components/PartnerDiscovery";
 import PartnerVerify from "@/components/PartnerVerify";
 import PartnerExecution from "@/components/PartnerExecution";
+import BrandFinder from "@/components/brand/BrandFinder";
 
 export default function App() {
   // 메인 모드: product (제품 기회) | partner (파트너 기회)
@@ -104,6 +105,7 @@ export default function App() {
             {[
               { id: "product", l: "📦 제품 기회", desc: "30 카테고리 매트릭스" },
               { id: "partner", l: "🤝 파트너 기회", desc: "RS 협업 발굴" },
+              { id: "brand", l: "🏷️ 브랜드 발굴", desc: "5단계 파이프라인 (신규)" },
             ].map((m) => (
               <button
                 key={m.id}
@@ -183,7 +185,9 @@ export default function App() {
       </div>
 
       <div style={{ maxWidth: 740, margin: "0 auto", padding: "14px 16px 50px" }}>
-        {mode === "product" ? (
+        {mode === "brand" ? (
+          <BrandFinder />
+        ) : mode === "product" ? (
           <>
             {/* 제품 기회 퍼널 — 4단계 */}
             <StepProgress
